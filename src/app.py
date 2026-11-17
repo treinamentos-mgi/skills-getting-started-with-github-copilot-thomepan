@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
 from pathlib import Path
+from threading import Lock
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -77,6 +78,8 @@ activities = {
     }
 }
 
+_activities_lock = Lock()
+
 
 @app.get("/")
 def root():
@@ -91,35 +94,37 @@ def get_activities():
 @app.post("/activities/{activity_name}/signup")
 def signup_for_activity(activity_name: str, email: str):
     """Sign up a student for an activity"""
-    # Validate activity exists
-    if activity_name not in activities:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    with _activities_lock:
+        # Validate activity exists
+        if activity_name not in activities:
+            raise HTTPException(status_code=404, detail="Activity not found")
 
-    # Get the specific activity
-    activity = activities[activity_name]
+        # Get the specific activity
+        activity = activities[activity_name]
 
-    # Check if the student is already signed up
-    if email in activity["participants"]:
-        raise HTTPException(status_code=400, detail="Student already signed up for this activity")
+        # Check if the student is already signed up
+        if email in activity["participants"]:
+            raise HTTPException(status_code=400, detail="Student already signed up for this activity")
 
-    # Check if the activity is full
-    if len(activity["participants"]) >= activity["max_participants"]:
-        raise HTTPException(status_code=400, detail="Activity is full")
+        # Check if the activity is full
+        if len(activity["participants"]) >= activity["max_participants"]:
+            raise HTTPException(status_code=400, detail="Activity is full")
 
-    # Add student
-    activity["participants"].append(email)
+        # Add student
+        activity["participants"].append(email)
     return {"message": f"Signed up {email} for {activity_name}"}
 
 
 @app.delete("/activities/{activity_name}/signup")
 def cancel_activity_signup(activity_name: str, email: str):
     """Cancel a student's signup for an activity"""
-    if activity_name not in activities:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    with _activities_lock:
+        if activity_name not in activities:
+            raise HTTPException(status_code=404, detail="Activity not found")
 
-    activity = activities[activity_name]
-    if email not in activity["participants"]:
-        raise HTTPException(status_code=404, detail="Student is not signed up for this activity")
+        activity = activities[activity_name]
+        if email not in activity["participants"]:
+            raise HTTPException(status_code=404, detail="Student is not signed up for this activity")
 
-    activity["participants"].remove(email)
+        activity["participants"].remove(email)
     return {"message": f"Canceled {email}'s signup for {activity_name}"}
